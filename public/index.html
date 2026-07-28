@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pearls E-Local Council Platform</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- ===================== AUTH SCREEN ===================== -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="brand">
+        <div class="brand-badge">PE</div>
+        <div>
+          <h1>Pearls E-Local Council Platform</h1>
+          <p class="tagline">We are together with you.</p>
+        </div>
+      </div>
+
+      <div class="auth-tabs">
+        <button id="tab-login" class="auth-tab active" type="button">Log In</button>
+        <button id="tab-signup" class="auth-tab" type="button">Create Account</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <label>Username
+          <input type="text" name="username" required autocomplete="username" />
+        </label>
+        <label>Password
+          <input type="password" name="password" required autocomplete="current-password" />
+        </label>
+        <div id="login-error" class="form-error"></div>
+        <button type="submit" class="btn btn-primary btn-block">Log In</button>
+        <p class="hint">First time on a fresh database? Log in as <b>admin</b> after running
+          <code>npm run set-admin-password</code> (see README).</p>
+      </form>
+
+      <form id="signup-form" class="auth-form hidden">
+        <label>Full Name
+          <input type="text" name="displayName" required />
+        </label>
+        <label>Choose a Username
+          <input type="text" name="username" required />
+        </label>
+        <label>Email
+          <input type="email" name="email" />
+        </label>
+        <label>Choose a Password
+          <input type="password" name="password" required minlength="6" autocomplete="new-password" />
+        </label>
+        <div id="signup-error" class="form-error"></div>
+        <button type="submit" class="btn btn-primary btn-block">Create My Account</button>
+        <p class="hint">New accounts start with the <b>Resident</b> role — self-service access to letters,
+          reports, and your community notice board.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== APP SHELL ===================== -->
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-badge small">PE</div>
+        <span>Pearls Council</span>
+      </div>
+      <nav id="sidebar-nav" class="sidebar-nav"></nav>
+      <div class="sidebar-footer">
+        <div id="user-chip" class="user-chip"></div>
+        <button id="logout-btn" class="btn btn-ghost btn-block">Log Out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="hamburger" class="hamburger" aria-label="Toggle menu">☰</button>
+        <h2 id="view-title">Dashboard</h2>
+      </header>
+      <div id="view-content" class="view-content"></div>
+    </main>
+  </div>
+
+  <!-- ===================== MODAL (create/edit form) ===================== -->
+  <div id="modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Add Record</h3>
+        <button id="modal-close" class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <form id="modal-form" class="modal-form"></form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
