@@ -1,14 +1,16 @@
 # Pearls E-Local Council Platform — Live Web App
 
-This turns your Phase 5/6/9 Oracle schema into a **real, working web application**:
+This turns your Phase 5/6/9 PostgreSQL schema (Railway-ready) into a **real, working web application**:
 every table in your design is a clickable feature in the sidebar — not a diagram.
 Click a feature, see the live data, click **Add**, fill a form, and it's saved
-straight into your Oracle database. People can also **create their own login
+straight into your PostgreSQL database (e.g. Railway). People can also **create their own login
 accounts** right from the app (self-signup, with the `RESIDENT` role).
 
-It is a standard **Node.js + Express** backend talking to **Oracle** (via the
-official `node-oracledb` driver, in THIN mode — no separate Oracle Instant
-Client install needed) with a small, dependency-free HTML/JS frontend.
+It is a standard **Node.js + Express** backend talking to **PostgreSQL**
+(via the `pg` driver) with a small, dependency-free HTML/JS frontend.
+Ready to deploy on Railway using its PostgreSQL add-on. Original Oracle
+schema/PL-SQL scripts are still in `server/sql/` if needed separately;
+`server/sql-postgres/` is what this app actually runs against.
 
 ```
 build/
@@ -191,44 +193,29 @@ Point your domain at it, put it behind HTTPS, and it's a live multi-user
 app — accounts, edits, and everything typed in are saved straight to your
 Oracle server as they happen.
 
-### Deploying on Railway specifically
-
-The repo includes a `Dockerfile` **at the repo root** that explicitly builds
-the app from the `server/` subfolder. This is deliberate — Railway's
-auto-detection (Railpack/Nixpacks) can get confused by a monorepo-style
-layout and fail with errors like `Script start.sh not found` or `Railpack
-could not determine how to build the app`. A root-level Dockerfile sidesteps
-that guessing entirely: Railway detects it automatically and just runs it.
+### Deploying on Railway (PostgreSQL)
 
 1. **New Project → Deploy from GitHub repo** → pick this repo.
-2. Go to **Settings → Root Directory / Source** and make sure it's **blank/
-   repo root** (not `server`) — the Dockerfile itself handles reaching into
-   `server/`, so Railway needs to see the Dockerfile at the top level.
-3. Also check **Settings → Build** for any manually-set **Custom Start
-   Command** (e.g. a leftover `start.sh`, `npm start`, etc.) and **clear
-   it** — the Dockerfile's own `CMD` handles startup; a leftover custom
-   command can override it and cause exactly the "script not found" error.
-4. Under **Variables**, add everything from `server/.env.example`
-   (`ORACLE_USER`, `ORACLE_PASSWORD`, `ORACLE_CONNECT_STRING`, `JWT_SECRET`,
-   etc.) with your real values. **Don't** manually set a `PORT` variable —
-   Railway injects its own and the app already reads `process.env.PORT`.
-5. **Settings → Networking → Generate Domain** if you don't have a public
-   URL yet — a service with no domain generated has nothing for the
-   internet to reach, which also shows as request failures.
-6. Deploy (should trigger automatically after step 1, or use **Deploy**
-   manually). Watch **Deploy Logs** — you're looking for:
+2. **New → Database → Add PostgreSQL** in the same project — Railway injects
+   `DATABASE_URL` into your app service automatically, no manual copying.
+3. Load the schema: `server/sql-postgres/01_Schema.sql` then
+   `server/sql-postgres/02_Seed_Data.sql`, via Railway's **Data** tab query
+   editor, or from your machine:
+   ```bash
+   psql "$DATABASE_URL" -f server/sql-postgres/01_Schema.sql
+   psql "$DATABASE_URL" -f server/sql-postgres/02_Seed_Data.sql
+   ```
+4. Under **Variables** on the app service, set `JWT_SECRET` (e.g. output of
+   `openssl rand -hex 32`). `DATABASE_URL` is already set by step 2. Don't
+   set `PORT` — Railway injects its own.
+5. Root Directory should be blank (repo root) — the root-level `Dockerfile`
+   builds from `server/` explicitly.
+6. Deploy. Watch Deploy Logs for:
    ```
    Pearls E-Local Council Platform running at http://localhost:XXXX
    ```
-   If you instead see an Oracle connection error there, that's a
-   *different*, later problem — it means the app is now running correctly,
-   and your `ORACLE_*` variables need attention next.
-7. Run the one-time admin password setup from your own machine (pointed at
-   the same Oracle DB) — Railway doesn't give you a shell by default on the
-   free tier:
+7. Set the admin password (from your machine, using Railway's DATABASE_URL):
    ```bash
    cd server
-   cp .env.example .env   # fill in the same ORACLE_* values as Railway
-   npm install
-   npm run set-admin-password admin YourChosenPassword123
+   DATABASE_URL="<paste from Railway Variables>" npm run set-admin-password admin YourChosenPassword123
    ```

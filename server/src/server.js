@@ -36,7 +36,7 @@ async function start() {
   try {
     await initPool();
   } catch (e) {
-    console.error('\n[FATAL] Could not connect to Oracle. Check your .env settings.');
+    console.error('\n[FATAL] Could not connect to PostgreSQL. Check your DATABASE_URL / env settings.');
     console.error(e.message);
     process.exit(1);
   }

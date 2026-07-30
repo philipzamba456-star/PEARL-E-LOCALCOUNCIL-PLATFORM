@@ -1,61 +1,62 @@
-const oracledb = require('oracledb');
-
-oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
-oracledb.autoCommit = false;
-oracledb.fetchAsString = [oracledb.CLOB];
+const { Pool } = require('pg');
 
 let pool;
 
 /**
- * Initialise the connection pool. Uses node-oracledb's THIN driver by
- * default (pure JavaScript — no Oracle Instant Client install required).
- * If you ever need THICK mode (e.g. for some older Oracle features),
- * call oracledb.initOracleClient() before this runs — see README.
+ * Initialise the connection pool. Railway's PostgreSQL add-on injects a
+ * single DATABASE_URL — that's all that's needed there. For local dev
+ * without a DATABASE_URL, falls back to individual PG* variables.
  */
 async function initPool() {
   if (pool) return pool;
 
-  const connectString =
-    process.env.ORACLE_CONNECT_STRING ||
-    `${process.env.ORACLE_HOST}:${process.env.ORACLE_PORT || 1521}/${process.env.ORACLE_SERVICE_NAME}`;
+  const connectionString = process.env.DATABASE_URL;
 
-  pool = await oracledb.createPool({
-    user: process.env.ORACLE_USER,
-    password: process.env.ORACLE_PASSWORD,
-    connectString,
-    poolMin: Number(process.env.ORACLE_POOL_MIN || 1),
-    poolMax: Number(process.env.ORACLE_POOL_MAX || 10),
-    poolIncrement: 1,
-  });
+  pool = connectionString
+    ? new Pool({
+        connectionString,
+        ssl: process.env.PGSSL === 'false' ? false : { rejectUnauthorized: false },
+        max: Number(process.env.PG_POOL_MAX || 10),
+      })
+    : new Pool({
+        host: process.env.PGHOST || 'localhost',
+        port: Number(process.env.PGPORT || 5432),
+        database: process.env.PGDATABASE,
+        user: process.env.PGUSER,
+        password: process.env.PGPASSWORD,
+        max: Number(process.env.PG_POOL_MAX || 10),
+      });
 
-  console.log(`[db] Oracle pool created -> ${connectString}`);
+  // Fail fast if credentials are wrong, rather than only failing on first query.
+  const client = await pool.connect();
+  client.release();
+
+  console.log(`[db] PostgreSQL pool created${connectionString ? ' (via DATABASE_URL)' : ''}`);
   return pool;
 }
 
-/** Run fn(connection) inside a pooled connection, always releasing it. */
+/** Run fn(client) inside a pooled connection, always releasing it. */
 async function withConnection(fn) {
   const p = await initPool();
-  const conn = await p.getConnection();
+  const client = await p.connect();
   try {
-    return await fn(conn);
+    return await fn(client);
   } finally {
-    try { await conn.close(); } catch (e) { console.error('[db] close error', e); }
+    client.release();
   }
 }
 
-/** Convenience: run one statement, commit, return result. */
-async function execute(sql, binds = {}, opts = {}) {
-  return withConnection(async (conn) => {
-    const result = await conn.execute(sql, binds, { autoCommit: true, ...opts });
-    return result;
-  });
+/** Convenience: run one parameterised query, return the pg result object. */
+async function execute(sql, params = []) {
+  const p = await initPool();
+  return p.query(sql, params);
 }
 
 async function closePool() {
   if (pool) {
-    await pool.close(0);
+    await pool.end();
     pool = undefined;
   }
 }
 
-module.exports = { initPool, withConnection, execute, closePool, oracledb };
+module.exports = { initPool, withConnection, execute, closePool };

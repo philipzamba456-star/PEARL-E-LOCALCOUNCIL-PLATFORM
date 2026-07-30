@@ -1,30 +1,29 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { withConnection, oracledb } = require('../db');
+const { withConnection } = require('../db');
 const { signToken, requireAuth } = require('../auth');
 
 const router = express.Router();
 
-async function loadUserWithRoles(conn, username) {
-  const userRes = await conn.execute(
+async function loadUserWithRoles(client, username) {
+  const userRes = await client.query(
     `SELECT user_id, resident_id, username, email, display_name, account_status, password_hash
-       FROM app_user WHERE UPPER(username) = UPPER(:username)`,
-    { username }
+       FROM app_user WHERE UPPER(username) = UPPER($1)`,
+    [username]
   );
   if (userRes.rows.length === 0) return null;
   const user = userRes.rows[0];
 
-  const rolesRes = await conn.execute(
+  const rolesRes = await client.query(
     `SELECT ar.role_name
        FROM user_role ur JOIN app_role ar ON ar.role_id = ur.role_id
-      WHERE ur.user_id = :uid`,
-    { uid: user.USER_ID }
+      WHERE ur.user_id = $1`,
+    [user.user_id]
   );
-  user.ROLES = rolesRes.rows.map((r) => r.ROLE_NAME);
+  user.roles = rolesRes.rows.map((r) => r.role_name);
   return user;
 }
 
-// ---------------------------------------------------------------- SIGN UP
 router.post('/signup', async (req, res) => {
   const { username, email, password, displayName } = req.body || {};
 
@@ -33,58 +32,50 @@ router.post('/signup', async (req, res) => {
   }
 
   try {
-    await withConnection(async (conn) => {
-      const existing = await conn.execute(
-        `SELECT user_id FROM app_user WHERE UPPER(username) = UPPER(:username) OR (email IS NOT NULL AND UPPER(email) = UPPER(:email))`,
-        { username, email: email || username }
-      );
-      if (existing.rows.length > 0) {
-        const err = new Error('That username or email is already registered.');
-        err.status = 409;
-        throw err;
-      }
-
-      const hash = await bcrypt.hash(password, 10);
-
-      const insertUser = await conn.execute(
-        `INSERT INTO app_user (username, email, display_name, password_hash, account_status)
-         VALUES (:username, :email, :displayName, :hash, 'ACTIVE')
-         RETURNING user_id INTO :newId`,
-        {
-          username,
-          email: email || null,
-          displayName: displayName || username,
-          hash,
-          newId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
-        },
-        { autoCommit: false }
-      );
-      const newUserId = insertUser.outBinds.newId[0];
-
-      // Every self-signed-up account gets the base RESIDENT role automatically.
-      const roleRes = await conn.execute(`SELECT role_id FROM app_role WHERE role_name = 'RESIDENT'`);
-      if (roleRes.rows.length > 0) {
-        await conn.execute(
-          `INSERT INTO user_role (user_id, role_id) VALUES (:uid, :rid)`,
-          { uid: newUserId, rid: roleRes.rows[0].ROLE_ID },
-          { autoCommit: false }
+    await withConnection(async (client) => {
+      await client.query('BEGIN');
+      try {
+        const existing = await client.query(
+          `SELECT user_id FROM app_user WHERE UPPER(username) = UPPER($1) OR (email IS NOT NULL AND UPPER(email) = UPPER($2))`,
+          [username, email || username]
         );
+        if (existing.rows.length > 0) {
+          const err = new Error('That username or email is already registered.');
+          err.status = 409;
+          throw err;
+        }
+
+        const hash = await bcrypt.hash(password, 10);
+
+        const insertUser = await client.query(
+          `INSERT INTO app_user (username, email, display_name, password_hash, account_status)
+           VALUES ($1, $2, $3, $4, 'ACTIVE') RETURNING user_id`,
+          [username, email || null, displayName || username, hash]
+        );
+        const newUserId = insertUser.rows[0].user_id;
+
+        const roleRes = await client.query(`SELECT role_id FROM app_role WHERE role_name = 'RESIDENT'`);
+        if (roleRes.rows.length > 0) {
+          await client.query(`INSERT INTO user_role (user_id, role_id) VALUES ($1, $2)`, [newUserId, roleRes.rows[0].role_id]);
+        }
+
+        await client.query(
+          `INSERT INTO activity_log (user_id, activity_type, ip_address) VALUES ($1, 'LOGIN', $2)`,
+          [newUserId, req.ip || null]
+        );
+
+        await client.query('COMMIT');
+
+        const token = signToken({ userId: newUserId, username, roles: ['RESIDENT'] });
+        res.cookie('token', token, { httpOnly: true, sameSite: 'lax' });
+        res.status(201).json({
+          token,
+          user: { userId: newUserId, username, email, displayName: displayName || username, roles: ['RESIDENT'] },
+        });
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
       }
-
-      await conn.execute(
-        `INSERT INTO activity_log (user_id, activity_type, ip_address) VALUES (:uid, 'LOGIN', :ip)`,
-        { uid: newUserId, ip: req.ip || null },
-        { autoCommit: false }
-      );
-
-      await conn.commit();
-
-      const token = signToken({ userId: newUserId, username, roles: ['RESIDENT'] });
-      res.cookie('token', token, { httpOnly: true, sameSite: 'lax' });
-      res.status(201).json({
-        token,
-        user: { userId: newUserId, username, email, displayName: displayName || username, roles: ['RESIDENT'] },
-      });
     });
   } catch (e) {
     console.error('[auth/signup]', e);
@@ -92,41 +83,36 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// ------------------------------------------------------------------ LOGIN
 router.post('/login', async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
 
   try {
-    await withConnection(async (conn) => {
-      const user = await loadUserWithRoles(conn, username);
-      if (!user || !user.PASSWORD_HASH) {
+    await withConnection(async (client) => {
+      const user = await loadUserWithRoles(client, username);
+      if (!user || !user.password_hash) {
         return res.status(401).json({ error: 'Invalid username or password.' });
       }
-      if (user.ACCOUNT_STATUS !== 'ACTIVE') {
-        return res.status(403).json({ error: `Account is ${user.ACCOUNT_STATUS}. Contact an administrator.` });
+      if (user.account_status !== 'ACTIVE') {
+        return res.status(403).json({ error: `Account is ${user.account_status}. Contact an administrator.` });
       }
 
-      const ok = await bcrypt.compare(password, user.PASSWORD_HASH);
+      const ok = await bcrypt.compare(password, user.password_hash);
       if (!ok) return res.status(401).json({ error: 'Invalid username or password.' });
 
-      await conn.execute(
-        `UPDATE app_user SET last_login_date = SYSDATE WHERE user_id = :uid`,
-        { uid: user.USER_ID }, { autoCommit: false }
+      await client.query(`UPDATE app_user SET last_login_date = CURRENT_TIMESTAMP WHERE user_id = $1`, [user.user_id]);
+      await client.query(
+        `INSERT INTO activity_log (user_id, activity_type, ip_address) VALUES ($1, 'LOGIN', $2)`,
+        [user.user_id, req.ip || null]
       );
-      await conn.execute(
-        `INSERT INTO activity_log (user_id, activity_type, ip_address) VALUES (:uid, 'LOGIN', :ip)`,
-        { uid: user.USER_ID, ip: req.ip || null }, { autoCommit: false }
-      );
-      await conn.commit();
 
-      const token = signToken({ userId: user.USER_ID, username: user.USERNAME, roles: user.ROLES });
+      const token = signToken({ userId: user.user_id, username: user.username, roles: user.roles });
       res.cookie('token', token, { httpOnly: true, sameSite: 'lax' });
       res.json({
         token,
         user: {
-          userId: user.USER_ID, username: user.USERNAME, email: user.EMAIL,
-          displayName: user.DISPLAY_NAME, residentId: user.RESIDENT_ID, roles: user.ROLES,
+          userId: user.user_id, username: user.username, email: user.email,
+          displayName: user.display_name, residentId: user.resident_id, roles: user.roles,
         },
       });
     });
@@ -136,15 +122,14 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------------- ME
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    await withConnection(async (conn) => {
-      const user = await loadUserWithRoles(conn, req.user.username);
+    await withConnection(async (client) => {
+      const user = await loadUserWithRoles(client, req.user.username);
       if (!user) return res.status(404).json({ error: 'User not found' });
       res.json({
-        userId: user.USER_ID, username: user.USERNAME, email: user.EMAIL,
-        displayName: user.DISPLAY_NAME, residentId: user.RESIDENT_ID, roles: user.ROLES,
+        userId: user.user_id, username: user.username, email: user.email,
+        displayName: user.display_name, residentId: user.resident_id, roles: user.roles,
       });
     });
   } catch (e) {

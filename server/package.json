@@ -1,7 +1,7 @@
 {
   "name": "pearls-e-local-council-platform",
-  "version": "1.0.0",
-  "description": "Live CRUD web app over the Pearls E-Local Council Oracle schema — every table is a clickable feature, with account signup/login.",
+  "version": "2.0.0",
+  "description": "Live CRUD web app over the Pearls E-Local Council schema (PostgreSQL / Railway) — every table is a clickable feature, with account signup/login.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -15,9 +15,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "oracledb": "^6.5.1"
+    "pg": "^8.13.0"
   },
-  "engines": {
-    "node": ">=18"
-  }
+  "engines": { "node": ">=18" }
 }
