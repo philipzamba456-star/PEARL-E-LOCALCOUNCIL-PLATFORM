@@ -29,7 +29,10 @@
           <input type="text" name="username" required autocomplete="username" />
         </label>
         <label>Password
-          <input type="password" name="password" required autocomplete="current-password" />
+          <div class="password-field">
+            <input type="password" id="login-password" name="password" required autocomplete="current-password" />
+            <button type="button" class="password-toggle" data-target="login-password" aria-label="Show password">👁</button>
+          </div>
         </label>
         <div id="login-error" class="form-error"></div>
         <button type="submit" class="btn btn-primary btn-block">Log In</button>
@@ -48,7 +51,10 @@
           <input type="email" name="email" />
         </label>
         <label>Choose a Password
-          <input type="password" name="password" required minlength="6" autocomplete="new-password" />
+          <div class="password-field">
+            <input type="password" id="signup-password" name="password" required minlength="6" autocomplete="new-password" />
+            <button type="button" class="password-toggle" data-target="signup-password" aria-label="Show password">👁</button>
+          </div>
         </label>
         <div id="signup-error" class="form-error"></div>
         <button type="submit" class="btn btn-primary btn-block">Create My Account</button>

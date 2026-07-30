@@ -66,6 +66,13 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 14px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); font-weight: 400; color: var(--text);
 }
 .auth-form input:focus, .auth-form select:focus, .auth-form textarea:focus { outline: 2px solid var(--navy); outline-offset: 1px; }
+.password-field { position: relative; display: flex; }
+.password-field input { flex: 1; padding-right: 40px; }
+.password-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; font-size: 15px; padding: 6px 8px; border-radius: 6px; opacity: .6;
+}
+.password-toggle:hover { opacity: 1; background: #f0f2f5; }
 .form-error { color: var(--danger); font-size: 13px; min-height: 4px; }
 .hint { font-size: 12px; color: var(--text-muted); text-align: center; margin: 4px 0 0; line-height: 1.5; }
 
