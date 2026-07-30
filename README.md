@@ -193,28 +193,39 @@ Oracle server as they happen.
 
 ### Deploying on Railway specifically
 
+The repo includes a `Dockerfile` **at the repo root** that explicitly builds
+the app from the `server/` subfolder. This is deliberate — Railway's
+auto-detection (Railpack/Nixpacks) can get confused by a monorepo-style
+layout and fail with errors like `Script start.sh not found` or `Railpack
+could not determine how to build the app`. A root-level Dockerfile sidesteps
+that guessing entirely: Railway detects it automatically and just runs it.
+
 1. **New Project → Deploy from GitHub repo** → pick this repo.
-2. **This is the step that matters:** go to the service's **Settings → Root
-   Directory** and set it to `server`. The Node app (`package.json`) lives
-   in the `server/` folder, not the repo root — without this setting,
-   Railway may not find/run it correctly and will just serve `index.html`
-   as a static file, which looks like the app is "up" but every `/api/...`
-   call 404s (no backend is actually running).
-3. Under **Variables**, add everything from `.env.example`
+2. Go to **Settings → Root Directory / Source** and make sure it's **blank/
+   repo root** (not `server`) — the Dockerfile itself handles reaching into
+   `server/`, so Railway needs to see the Dockerfile at the top level.
+3. Also check **Settings → Build** for any manually-set **Custom Start
+   Command** (e.g. a leftover `start.sh`, `npm start`, etc.) and **clear
+   it** — the Dockerfile's own `CMD` handles startup; a leftover custom
+   command can override it and cause exactly the "script not found" error.
+4. Under **Variables**, add everything from `server/.env.example`
    (`ORACLE_USER`, `ORACLE_PASSWORD`, `ORACLE_CONNECT_STRING`, `JWT_SECRET`,
-   etc.) with your real values.
-4. Railway auto-detects the Node app via Nixpacks and runs `npm install` +
-   `npm start` — no Dockerfile needed (though `server/Dockerfile` is there
-   if you'd rather build that way; if so, also set **Dockerfile Path** to
-   `Dockerfile` with the build context as the `server` root directory from
-   step 2).
-5. Deploy. Check the **Deploy Logs** — you should see
-   `Pearls E-Local Council Platform running at http://localhost:XXXX`. If
-   instead you see an Oracle connection error, your `ORACLE_*` variables
-   need fixing (not a Railway problem at that point).
-6. Once it's live, run the one-time admin password setup from your own
-   machine (pointed at the same Oracle DB) — Railway doesn't give you a
-   shell by default on the free tier:
+   etc.) with your real values. **Don't** manually set a `PORT` variable —
+   Railway injects its own and the app already reads `process.env.PORT`.
+5. **Settings → Networking → Generate Domain** if you don't have a public
+   URL yet — a service with no domain generated has nothing for the
+   internet to reach, which also shows as request failures.
+6. Deploy (should trigger automatically after step 1, or use **Deploy**
+   manually). Watch **Deploy Logs** — you're looking for:
+   ```
+   Pearls E-Local Council Platform running at http://localhost:XXXX
+   ```
+   If you instead see an Oracle connection error there, that's a
+   *different*, later problem — it means the app is now running correctly,
+   and your `ORACLE_*` variables need attention next.
+7. Run the one-time admin password setup from your own machine (pointed at
+   the same Oracle DB) — Railway doesn't give you a shell by default on the
+   free tier:
    ```bash
    cd server
    cp .env.example .env   # fill in the same ORACLE_* values as Railway
