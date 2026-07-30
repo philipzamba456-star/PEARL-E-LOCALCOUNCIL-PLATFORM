@@ -15,15 +15,15 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
+app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+
 app.use('/api/auth', authRoutes);
 app.use('/api', apiRoutes);
 
-app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
-
 // Serve the frontend (public/) as static files
-app.use(express.static(path.join(__dirname, '..', '..', 'public')));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', '..', 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
 // Central error handler (last resort)

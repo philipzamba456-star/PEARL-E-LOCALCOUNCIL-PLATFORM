@@ -12,21 +12,22 @@ Client install needed) with a small, dependency-free HTML/JS frontend.
 
 ```
 build/
-├── server/                 ← Node.js backend (API + serves the frontend)
-│   ├── sql/                ← your original schema scripts + one small addition
-│   ├── scripts/            ← admin password helper
-│   ├── src/
-│   │   ├── metadata.js     ← *** every table/feature is defined here ***
-│   │   ├── db.js           ← Oracle connection pool
-│   │   ├── auth.js         ← JWT auth middleware
-│   │   ├── server.js       ← Express app entry point
-│   │   └── routes/         ← auth.js (signup/login) + api.js (generic CRUD)
-│   ├── package.json
-│   └── .env.example
-└── public/                 ← frontend (no build step — just static files)
-    ├── index.html
-    ├── css/style.css
-    └── js/app.js
+└── server/                 ← the whole app — one self-contained Node project
+    ├── sql/                ← your original schema scripts + one small addition
+    ├── scripts/            ← admin password helper
+    ├── src/
+    │   ├── metadata.js     ← *** every table/feature is defined here ***
+    │   ├── db.js           ← Oracle connection pool
+    │   ├── auth.js         ← JWT auth middleware
+    │   ├── server.js       ← Express app entry point (also serves ../public)
+    │   └── routes/         ← auth.js (signup/login) + api.js (generic CRUD)
+    ├── public/             ← frontend (no build step — just static files)
+    │   ├── index.html
+    │   ├── css/style.css
+    │   └── js/app.js
+    ├── package.json
+    ├── Dockerfile
+    └── .env.example
 ```
 
 ---
@@ -189,3 +190,34 @@ a container platform. The only two things it needs at runtime are:
 Point your domain at it, put it behind HTTPS, and it's a live multi-user
 app — accounts, edits, and everything typed in are saved straight to your
 Oracle server as they happen.
+
+### Deploying on Railway specifically
+
+1. **New Project → Deploy from GitHub repo** → pick this repo.
+2. **This is the step that matters:** go to the service's **Settings → Root
+   Directory** and set it to `server`. The Node app (`package.json`) lives
+   in the `server/` folder, not the repo root — without this setting,
+   Railway may not find/run it correctly and will just serve `index.html`
+   as a static file, which looks like the app is "up" but every `/api/...`
+   call 404s (no backend is actually running).
+3. Under **Variables**, add everything from `.env.example`
+   (`ORACLE_USER`, `ORACLE_PASSWORD`, `ORACLE_CONNECT_STRING`, `JWT_SECRET`,
+   etc.) with your real values.
+4. Railway auto-detects the Node app via Nixpacks and runs `npm install` +
+   `npm start` — no Dockerfile needed (though `server/Dockerfile` is there
+   if you'd rather build that way; if so, also set **Dockerfile Path** to
+   `Dockerfile` with the build context as the `server` root directory from
+   step 2).
+5. Deploy. Check the **Deploy Logs** — you should see
+   `Pearls E-Local Council Platform running at http://localhost:XXXX`. If
+   instead you see an Oracle connection error, your `ORACLE_*` variables
+   need fixing (not a Railway problem at that point).
+6. Once it's live, run the one-time admin password setup from your own
+   machine (pointed at the same Oracle DB) — Railway doesn't give you a
+   shell by default on the free tier:
+   ```bash
+   cd server
+   cp .env.example .env   # fill in the same ORACLE_* values as Railway
+   npm install
+   npm run set-admin-password admin YourChosenPassword123
+   ```
