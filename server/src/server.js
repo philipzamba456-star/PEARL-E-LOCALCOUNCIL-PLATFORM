@@ -5,6 +5,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
 const { initPool, closePool } = require('./db');
+const { autoMigrate } = require('./migrate');
 const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes/api');
 
@@ -63,6 +64,7 @@ async function start() {
   try {
     await initPool();
     console.log('[db] Startup connectivity check: OK');
+    await autoMigrate();
   } catch (e) {
     console.error('\n[WARNING] Could not connect to PostgreSQL at startup.');
     console.error('DATABASE_URL is set:', Boolean(process.env.DATABASE_URL));
